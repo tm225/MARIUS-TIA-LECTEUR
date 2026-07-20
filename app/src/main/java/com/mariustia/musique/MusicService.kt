@@ -3,6 +3,7 @@ package com.mariustia.musique
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import com.mariustia.musique.audio.EqualizerManager
 
 class MusicService : MediaSessionService() {
 
@@ -13,6 +14,17 @@ class MusicService : MediaSessionService() {
         val player = ExoPlayer.Builder(this).build()
         player.setHandleAudioBecomingNoisy(true)
         mediaSession = MediaSession.Builder(this, player).build()
+
+        // Connecte l'égaliseur dès qu'une session audio est disponible
+        EqualizerManager.attach(player.audioSessionId)
+        player.addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {
+            override fun onAudioSessionIdChanged(
+                eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+                audioSessionId: Int
+            ) {
+                EqualizerManager.attach(audioSessionId)
+            }
+        })
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
@@ -20,6 +32,7 @@ class MusicService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        EqualizerManager.release()
         mediaSession?.run {
             player.release()
             release()

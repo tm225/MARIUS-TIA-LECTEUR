@@ -17,6 +17,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.mariustia.musique.data.Track
 import com.mariustia.musique.data.formatDuration
 import com.mariustia.musique.ui.theme.SurfaceLight
@@ -116,11 +118,24 @@ private fun TrackRow(
                 .background(if (isPlaying) accentColor.copy(alpha = 0.25f) else Color(0xFF1E2733)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                Icons.Filled.MusicNote,
-                contentDescription = null,
-                tint = if (isPlaying) accentColor else TextSecondary
-            )
+            var artLoaded by remember(track.id) { mutableStateOf(true) }
+            if (artLoaded) {
+                AsyncImage(
+                    model = ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                        .data(track.albumArtUri)
+                        .build(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(6.dp)),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    onError = { artLoaded = false }
+                )
+            } else {
+                Icon(
+                    Icons.Filled.MusicNote,
+                    contentDescription = null,
+                    tint = if (isPlaying) accentColor else TextSecondary
+                )
+            }
         }
 
         Spacer(modifier = Modifier.width(12.dp))

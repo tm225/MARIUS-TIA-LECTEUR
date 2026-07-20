@@ -32,10 +32,16 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.common.util.concurrent.ListenableFuture
+import com.mariustia.musique.audio.EqualizerManager
 import com.mariustia.musique.data.MusicScanner
+import com.mariustia.musique.data.Playlist
+import com.mariustia.musique.data.PlaylistManager
 import com.mariustia.musique.data.Track
-import com.mariustia.musique.ui.LibraryScreen
+import com.mariustia.musique.ui.AddTracksScreen
+import com.mariustia.musique.ui.EqualizerScreen
+import com.mariustia.musique.ui.LibraryHostScreen
 import com.mariustia.musique.ui.PlayerScreen
+import com.mariustia.musique.ui.PlaylistDetailScreen
 import com.mariustia.musique.ui.SettingsScreen
 import com.mariustia.musique.ui.theme.MariusTiaMusiqueTheme
 import com.mariustia.musique.ui.theme.TextSecondary
@@ -49,6 +55,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         PreferencesManager.init(applicationContext)
+        PlaylistManager.init(applicationContext)
 
         val neededPermission = if (Build.VERSION.SDK_INT >= 33)
             Manifest.permission.READ_MEDIA_AUDIO
@@ -111,12 +118,37 @@ class MainActivity : ComponentActivity() {
         }
 
         val controller by controllerState
+        val playlists by PlaylistManager.playlists
 
         var currentTrack by remember { mutableStateOf<Track?>(null) }
         var isPlaying by remember { mutableStateOf(false) }
         var position by remember { mutableStateOf(0L) }
         var shuffleOn by remember { mutableStateOf(false) }
         var repeatOn by remember { mutableStateOf(false) }
+        var selectedPlaylist by remember { mutableStateOf<Playlist?>(null) }
+
+        // Minuteur de sommeil
+        var sleepTimerEndMillis by remember { mutableStateOf<Long?>(null) }
+        var sleepMinutesLeft by remember { mutableStateOf<Int?>(null) }
+
+        LaunchedEffect(sleepTimerEndMillis) {
+            val end = sleepTimerEndMillis
+            if (end == null) {
+                sleepMinutesLeft = null
+                return@LaunchedEffect
+            }
+            while (true) {
+                val remaining = end - System.currentTimeMillis()
+                if (remaining <= 0) {
+                    controller?.pause()
+                    sleepTimerEndMillis = null
+                    sleepMinutesLeft = null
+                    break
+                }
+                sleepMinutesLeft = ((remaining / 60000) + 1).toInt()
+                delay(1000)
+            }
+        }
 
         // Écoute des changements d'état du lecteur
         DisposableEffect(controller) {
@@ -141,35 +173,34 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        fun playTrack(track: Track) {
+        fun playTrackList(list: List<Track>, track: Track) {
             val c = controller ?: return
-            val index = tracks.indexOfFirst { it.id == track.id }
+            val index = list.indexOfFirst { it.id == track.id }
             if (index < 0) return
 
-            if (c.mediaItemCount != tracks.size) {
-                val items = tracks.map { t ->
-                    MediaItem.Builder()
-                        .setMediaId(t.id.toString())
-                        .setUri(t.uri)
-                        .setMediaMetadata(
-                            androidx.media3.common.MediaMetadata.Builder()
-                                .setTitle(t.title)
-                                .setArtist(t.artist)
-                                .setAlbumTitle(t.album)
-                                .build()
-                        )
-                        .build()
-                }
-                c.setMediaItems(items, index, 0L)
-            } else {
-                c.seekTo(index, 0L)
+            val items = list.map { t ->
+                MediaItem.Builder()
+                    .setMediaId(t.id.toString())
+                    .setUri(t.uri)
+                    .setMediaMetadata(
+                        androidx.media3.common.MediaMetadata.Builder()
+                            .setTitle(t.title)
+                            .setArtist(t.artist)
+                            .setAlbumTitle(t.album)
+                            .build()
+                    )
+                    .build()
             }
+            c.setMediaItems(items, index, 0L)
             currentTrack = track
             c.prepare()
             c.play()
         }
 
         val navController = rememberNavController()
+        val navBackStackEntry by navController.currentBackStackEntryAsState()
+        val currentRoute = navBackStackEntry?.destination?.route
+        val showBottomBar = currentRoute in listOf("library", "player", "settings")
 
         Column(modifier = Modifier.fillMaxSize()) {
             AppHeader(accentColor = accentColor)
@@ -177,16 +208,21 @@ class MainActivity : ComponentActivity() {
             Box(modifier = Modifier.weight(1f)) {
                 NavHost(navController = navController, startDestination = "library") {
                     composable("library") {
-                        LibraryScreen(
+                        LibraryHostScreen(
                             tracks = tracks,
                             currentTrackId = currentTrack?.id,
                             accentColor = accentColor,
+                            playlists = playlists,
                             onTrackClick = { track ->
-                                playTrack(track)
-                                navController.navigate("player") {
-                                    launchSingleTop = true
-                                }
-                            }
+                                playTrackList(tracks, track)
+                                navController.navigate("player") { launchSingleTop = true }
+                            },
+                            onCreatePlaylist = { name -> PlaylistManager.createPlaylist(name) },
+                            onOpenPlaylist = { pl ->
+                                selectedPlaylist = pl
+                                navController.navigate("playlist_detail") { launchSingleTop = true }
+                            },
+                            onDeletePlaylist = { name -> PlaylistManager.deletePlaylist(name) }
                         )
                     }
                     composable("player") {
@@ -198,6 +234,7 @@ class MainActivity : ComponentActivity() {
                             shuffleOn = shuffleOn,
                             repeatOn = repeatOn,
                             accentColor = accentColor,
+                            sleepTimerMinutesLeft = sleepMinutesLeft,
                             onPlayPause = {
                                 controller?.let { if (it.isPlaying) it.pause() else it.play() }
                             },
@@ -212,6 +249,9 @@ class MainActivity : ComponentActivity() {
                                 repeatOn = !repeatOn
                                 controller?.repeatMode =
                                     if (repeatOn) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+                            },
+                            onSetSleepTimer = { minutes ->
+                                sleepTimerEndMillis = minutes?.let { System.currentTimeMillis() + it * 60_000L }
                             }
                         )
                     }
@@ -219,15 +259,75 @@ class MainActivity : ComponentActivity() {
                         SettingsScreen(
                             currentColor = accentColor,
                             trackCount = tracks.size,
-                            onColorSelected = { color ->
-                                PreferencesManager.setAccentColor(context, color)
-                            }
+                            onColorSelected = { color -> PreferencesManager.setAccentColor(context, color) },
+                            onOpenEqualizer = { navController.navigate("equalizer") { launchSingleTop = true } }
                         )
+                    }
+                    composable("equalizer") {
+                        val available by EqualizerManager.isAvailable
+                        val enabled by EqualizerManager.isEnabled
+                        val bands by EqualizerManager.bands
+                        val presets by EqualizerManager.presets
+                        val currentPreset by EqualizerManager.currentPreset
+                        EqualizerScreen(
+                            accentColor = accentColor,
+                            available = available,
+                            enabled = enabled,
+                            bands = bands,
+                            presets = presets,
+                            currentPreset = currentPreset,
+                            onBack = { navController.popBackStack() },
+                            onToggleEnabled = { EqualizerManager.setEnabled(it) },
+                            onBandChange = { band, level -> EqualizerManager.setBandLevel(band, level) },
+                            onPresetSelected = { EqualizerManager.usePreset(it) }
+                        )
+                    }
+                    composable("playlist_detail") {
+                        val pl = selectedPlaylist
+                        if (pl != null) {
+                            val liveVersion = playlists.find { it.name == pl.name } ?: pl
+                            PlaylistDetailScreen(
+                                playlist = liveVersion,
+                                allTracks = tracks,
+                                accentColor = accentColor,
+                                currentTrackId = currentTrack?.id,
+                                onBack = { navController.popBackStack() },
+                                onTrackClick = { track ->
+                                    val listTracks = liveVersion.trackIds.mapNotNull { id -> tracks.find { it.id == id } }
+                                    playTrackList(listTracks, track)
+                                    navController.navigate("player") { launchSingleTop = true }
+                                },
+                                onRemoveTrack = { id -> PlaylistManager.removeTrackFromPlaylist(liveVersion.name, id) },
+                                onAddTracks = { navController.navigate("add_tracks") { launchSingleTop = true } }
+                            )
+                        }
+                    }
+                    composable("add_tracks") {
+                        val pl = selectedPlaylist
+                        if (pl != null) {
+                            val liveVersion = playlists.find { it.name == pl.name } ?: pl
+                            AddTracksScreen(
+                                playlistName = liveVersion.name,
+                                allTracks = tracks,
+                                trackIdsInPlaylist = liveVersion.trackIds,
+                                accentColor = accentColor,
+                                onBack = { navController.popBackStack() },
+                                onToggleTrack = { track ->
+                                    if (track.id in liveVersion.trackIds) {
+                                        PlaylistManager.removeTrackFromPlaylist(liveVersion.name, track.id)
+                                    } else {
+                                        PlaylistManager.addTrackToPlaylist(liveVersion.name, track.id)
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
 
-            BottomNavBar(navController = navController, accentColor = accentColor)
+            if (showBottomBar) {
+                BottomNavBar(navController = navController, accentColor = accentColor)
+            }
         }
     }
 

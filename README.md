@@ -6,9 +6,10 @@ avec design "informatique" (thème sombre, police monospace, accents néon).
 ## Fonctionnalités
 - Scan automatique de **toutes les pistes audio** du téléphone (via MediaStore)
 - Lecture en arrière-plan avec notification (MediaSessionService)
-- Écran Bibliothèque avec recherche
-- Écran Lecteur : lecture/pause, suivant/précédent, barre de progression, aléatoire, répétition
-- Écran Paramètres : **changement de la couleur du lecteur** (8 teintes néon), appliquée à toute l'app
+- Écran Bibliothèque avec recherche + onglet **Playlists** (création, ajout/retrait de pistes)
+- Écran Lecteur : pochette d'album réelle en **disque rotatif animé**, barres d'égalisation vivantes, bouton lecture pulsant, lecture/pause, suivant/précédent, aléatoire, répétition, **minuteur de sommeil** (15/30/45/60 min)
+- **Égaliseur audio 5 bandes** avec préréglages (accessible depuis Paramètres)
+- Écran Paramètres : changement de la couleur du lecteur (8 teintes néon), appliquée à toute l'app
 - Nom "MARIUS TIA MUSIQUE" affiché en haut à gauche, dans la couleur choisie
 
 ## Compiler l'APK (via GitHub Actions — sans PC)

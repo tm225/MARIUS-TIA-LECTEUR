@@ -8,8 +8,11 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -28,7 +31,8 @@ import com.mariustia.musique.ui.theme.TextSecondary
 fun SettingsScreen(
     currentColor: Color,
     trackCount: Int,
-    onColorSelected: (Color) -> Unit
+    onColorSelected: (Color) -> Unit,
+    onOpenEqualizer: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -80,6 +84,27 @@ fun SettingsScreen(
         }
 
         Spacer(modifier = Modifier.height(28.dp))
+        HorizontalDivider(color = Color(0xFF1E2733))
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onOpenEqualizer() }
+                .padding(vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = currentColor)
+                Spacer(modifier = Modifier.width(10.dp))
+                Text("ÉGALISEUR AUDIO", color = Color(0xFFE6F1FF), fontWeight = FontWeight.Bold)
+            }
+            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = TextSecondary)
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
         HorizontalDivider(color = Color(0xFF1E2733))
         Spacer(modifier = Modifier.height(20.dp))
 
